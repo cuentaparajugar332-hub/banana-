@@ -12,7 +12,8 @@ const MAX = 100;
 function rateLimiter(req, res, next) {
   const ip =
     req.headers["x-forwarded-for"]?.split(",")[0].trim() ||
-    req.socket.remoteAddress || "?";
+    req.socket.remoteAddress ||
+    "?";
   const now = Date.now();
   const r = hits.get(ip);
   if (!r || now - r.start > WINDOW) {
@@ -48,59 +49,26 @@ function getScript() {
   return cache;
 }
 
-const BLOCKED_PAGE = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Blocked</title>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      background: #1a1a1a;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 100vh;
-      font-family: 'Segoe UI', sans-serif;
-    }
-    .card {
-      background: #2a2a2a;
-      border: 1px solid #3a3a3a;
-      border-radius: 16px;
-      padding: 48px 56px;
-      text-align: center;
-      max-width: 420px;
-    }
-    .icon { font-size: 64px; margin-bottom: 20px; }
-    h1 {
-      color: #e0e0e0;
-      font-size: 22px;
-      font-weight: 600;
-      letter-spacing: 1px;
-      margin-bottom: 12px;
-    }
-    p { color: #888; font-size: 14px; line-height: 1.6; }
-  </style>
-</head>
-<body>
-  <div class="card">
-    <div class="icon">⛔</div>
-    <h1>YOU ARE BLOCKED</h1>
-    <p>Access to this resource is restricted.<br>This content is not available in your browser.</p>
-  </div>
-</body>
-</html>`;
+const BLOCKED_PAGE = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Blocked</title><style>*{margin:0;padding:0;box-sizing:border-box}body{background:#1a1a1a;display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:'Segoe UI',sans-serif}.card{background:#2a2a2a;border:1px solid #3a3a3a;border-radius:16px;padding:48px 56px;text-align:center;max-width:420px}.icon{font-size:64px;margin-bottom:20px}h1{color:#e0e0e0;font-size:22px;font-weight:600;letter-spacing:1px;margin-bottom:12px}p{color:#888;font-size:14px;line-height:1.6}</style></head><body><div class="card"><div class="icon">⛔</div><h1>YOU ARE BLOCKED</h1><p>Access to this resource is restricted.<br>This content is not available in your browser.</p></div></body></html>`;
 
-function isBrowser(req) {
+function blockBrowsers(req, res, next) {
   const ua = req.headers["user-agent"] || "";
-  return ua.toLowerCase().includes("mozilla");
-}
-
-app.get("/get-script", rateLimiter, (req, res) => {
-  if (isBrowser(req)) {
+  const uaLower = ua.toLowerCase();
+  const isBrowser =
+    (uaLower.includes("chrome/") ||
+     uaLower.includes("firefox/") ||
+     uaLower.includes("safari/") ||
+     uaLower.includes("edge/") ||
+     uaLower.includes("opr/") ||
+     uaLower.includes("trident/")) &&
+    uaLower.includes("mozilla");
+  if (isBrowser) {
     return res.status(403).type("html").send(BLOCKED_PAGE);
   }
+  next();
+}
+
+app.get("/get-script", rateLimiter, blockBrowsers, (req, res) => {
   try {
     res.type("text").send(getScript());
   } catch {
